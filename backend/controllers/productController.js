@@ -13,6 +13,7 @@ const createProduct = async (req, res) => {
         unit: newProduct.unit,
         description: newProduct.description,
         status: newProduct.status,
+        _id: newProduct._id
     }
     });
   } catch (error) {

@@ -13,6 +13,7 @@ const createWarehouse = async (req, res) => {
         totalCapacity: newWarehouse.totalCapacity,
         managerId: newWarehouse.managerId,
         status: newWarehouse.status,
+        _id: newWarehouse._id
     }
     });
   } catch (error) {
