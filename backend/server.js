@@ -8,6 +8,9 @@ const inventoryRoutes = require('./routes/inventoryRoutes');
 const customerRoutes = require('./routes/customerRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const shipmentRoutes = require('./routes/shipmentRoutes');
+const vehicleRoutes = require('./routes/vehicleRoutes');
+const driverRoutes = require('./routes/driverRoutes');
+const dispatchRoutes = require('./routes/dispatchRoutes');
 
 dotenv.config();
 const app = express();
@@ -21,6 +24,9 @@ app.use('/api/inventory', inventoryRoutes)
 app.use('/api/customers', customerRoutes)
 app.use('/api/orders', orderRoutes)
 app.use('/api/shipments', shipmentRoutes)
+app.use('/api/vehicles', vehicleRoutes)
+app.use('/api/drivers', driverRoutes)
+app.use('/api/dispatches', dispatchRoutes)
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
