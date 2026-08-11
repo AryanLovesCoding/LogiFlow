@@ -5,6 +5,7 @@ title: {type: String, required: true},
 description: {type: String, required: true},
 priority: {type: String, enum: ['Low', 'Medium', 'High', 'Critical'], default: 'Medium'},
 linkedOrderId: {type: mongoose.Schema.Types.ObjectId, ref: 'Order'},
+assigneeId: {type: mongoose.Schema.Types.ObjectId, ref: 'User'},
 status: {type: String, enum: ['Open', 'In-Progress', 'Resolved', 'Closed'], default: 'Open'},
 comments: [
     {

@@ -11,6 +11,10 @@ const shipmentRoutes = require('./routes/shipmentRoutes');
 const vehicleRoutes = require('./routes/vehicleRoutes');
 const driverRoutes = require('./routes/driverRoutes');
 const dispatchRoutes = require('./routes/dispatchRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
+const logsRoutes = require('./routes/logsRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const ticketRoutes = require('./routes/ticketRoutes');
 
 dotenv.config();
 const app = express();
@@ -27,6 +31,11 @@ app.use('/api/shipments', shipmentRoutes)
 app.use('/api/vehicles', vehicleRoutes)
 app.use('/api/drivers', driverRoutes)
 app.use('/api/dispatches', dispatchRoutes)
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/logs', logsRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/tickets', ticketRoutes);
+
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
