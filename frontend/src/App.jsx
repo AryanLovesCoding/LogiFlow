@@ -4,6 +4,12 @@ import NotFound from './pages/NotFound';
 import ProtectedRoute from './components/ProtectedRoute';
 import AppShell from './components/AppShell';
 import Dashboard from './pages/Dashboard';
+import Warehouses from './pages/Warehouses';
+import WarehouseDetail from './pages/WarehouseDetail';
+import Products from './pages/Products';
+import Inventory from './pages/Inventory';
+import Customers from './pages/Customers';
+import CustomerDetail from './pages/CustomerDetail';
 
 function App() {
   return (
@@ -15,6 +21,12 @@ function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppShell />}>
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/warehouses" element={<Warehouses />} />
+            <Route path="/warehouses/:id" element={<WarehouseDetail />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/inventory" element={<Inventory />} />
+            <Route path="/customers" element={<Customers />} />
+            <Route path="/customers/:id" element={<CustomerDetail />} />
           </Route>
         </Route>
 
@@ -23,5 +35,4 @@ function App() {
     </BrowserRouter>
   );
 }
-
 export default App;
