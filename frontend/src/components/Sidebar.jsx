@@ -27,7 +27,10 @@ function Sidebar() {
         )}
 
         {['Administrator', 'Logistics Coordinator'].includes(user.role) && (
-          <NavLink to="/customers" className={linkClass}>Customers</NavLink>
+          <>
+            <NavLink to="/customers" className={linkClass}>Customers</NavLink>
+            <NavLink to="/orders" className={linkClass}>Orders</NavLink>
+          </>
         )}
       </nav>
     </div>

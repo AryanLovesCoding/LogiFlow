@@ -10,6 +10,9 @@ import Products from './pages/Products';
 import Inventory from './pages/Inventory';
 import Customers from './pages/Customers';
 import CustomerDetail from './pages/CustomerDetail';
+import Orders from './pages/Orders';
+import OrderDetail from './pages/OrderDetail';
+import CreateOrder from './pages/CreateOrder';
 
 function App() {
   return (
@@ -27,6 +30,9 @@ function App() {
             <Route path="/inventory" element={<Inventory />} />
             <Route path="/customers" element={<Customers />} />
             <Route path="/customers/:id" element={<CustomerDetail />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/orders/new" element={<CreateOrder />} />
+            <Route path="/orders/:id" element={<OrderDetail />} />
           </Route>
         </Route>
 
