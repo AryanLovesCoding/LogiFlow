@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
 import Pagination from '../components/Pagination';
 import RestockModal from '../components/RestockModal';
+import InventoryFormModal from '../components/InventoryFormModal';
 
 function Inventory() {
   const [inventory, setInventory] = useState([]);
@@ -12,8 +13,8 @@ function Inventory() {
   const [lowStockOnly, setLowStockOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [restockTarget, setRestockTarget] = useState(null);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
-  // Fetch warehouses & products ONCE and build { id: name } lookup maps
   useEffect(() => {
     api.get('/warehouses', { params: { limit: 100 } }).then((res) => {
       const map = {};
@@ -50,14 +51,19 @@ function Inventory() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">Inventory</h1>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={lowStockOnly}
-            onChange={(e) => { setLoading(true); setPage(1); setLowStockOnly(e.target.checked); }}
-          />
-          Low-stock only
-        </label>
+        <div className="flex items-center gap-4">
+          <button onClick={() => setAddModalOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded">
+            + Add Inventory
+          </button>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={lowStockOnly}
+              onChange={(e) => { setLoading(true); setPage(1); setLowStockOnly(e.target.checked); }}
+            />
+            Low-stock only
+          </label>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-x-auto">
@@ -97,6 +103,10 @@ function Inventory() {
 
       {restockTarget && (
         <RestockModal inventory={restockTarget} onClose={() => setRestockTarget(null)} onSaved={fetchInventory} />
+      )}
+
+      {addModalOpen && (
+        <InventoryFormModal onClose={() => setAddModalOpen(false)} onSaved={fetchInventory} />
       )}
     </div>
   );

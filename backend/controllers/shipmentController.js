@@ -40,7 +40,7 @@ const getShipments = async (req, res) => {
     filter.status = status;
     }
     if (warehouseId) {
-      filter.warehouseId = warehouseId;
+      filter.originWarehouseId = warehouseId;
     }
     if (req.query.startDate || req.query.endDate) {
     filter.createdAt = {};

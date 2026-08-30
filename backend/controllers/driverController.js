@@ -2,8 +2,16 @@ const Driver = require('../models/Driver');
 
 const createDriver = async (req, res) => {
   try {
-    const {name,licenceNumber, phone, assignedVehicleId, available} = req.body;
-    const newDriver = await Driver.create({name,licenceNumber, phone, assignedVehicleId, available} );
+    const {name, licenceNumber, phone, assignedVehicleId, available} = req.body;
+
+    if (assignedVehicleId) {
+      const alreadyAssigned = await Driver.findOne({ assignedVehicleId });
+      if (alreadyAssigned) {
+        return res.status(400).json({ message: 'This vehicle is already assigned to another driver' });
+      }
+    }
+
+    const newDriver = await Driver.create({name, licenceNumber, phone, assignedVehicleId, available});
     res.status(201).json({
     message: 'Driver successfully created',
     driver: {
@@ -83,6 +91,35 @@ const deleteDriver = async (req, res) => {
     }
 };
 
-module.exports = { createDriver, getDrivers, updateAvailability, deleteDriver };
+const updateDriver = async (req, res) => {
+  try {
+    if (req.body.assignedVehicleId) {
+      const alreadyAssigned = await Driver.findOne({
+        assignedVehicleId: req.body.assignedVehicleId,
+        _id: { $ne: req.params.id }
+      });
+      if (alreadyAssigned) {
+        return res.status(400).json({ message: 'This vehicle is already assigned to another driver' });
+      }
+    }
+
+    const updatedDriver = await Driver.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!updatedDriver) {
+      return res.status(404).json({ message: 'Driver not found' });
+    }
+    res.status(200).json({
+      message: 'Updated successfully',
+      driver: updatedDriver
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { createDriver, getDrivers, updateAvailability, updateDriver, deleteDriver };
 
 

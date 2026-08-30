@@ -32,7 +32,7 @@ const getProducts = async (req, res) => {
     filter.sku = { $regex: sku, $options: 'i' };
     }
     if (category) {
-    filter.category = category;
+    filter.category = { $regex: category, $options: 'i' };
     }
     const currentPage = Number(page) || 1;
     const pageLimit = Number(limit) || 10;

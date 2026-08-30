@@ -1,11 +1,13 @@
 import { useForm } from 'react-hook-form';
 import { useContext } from 'react';
 import api from '../api/axios';
+import { useNavigate } from 'react-router-dom';
 import AuthContext from '../context/AuthContext';
 
 function Login() {
   const { register, handleSubmit, formState: { errors } } = useForm();
   const { dispatch } = useContext(AuthContext);
+  const navigate = useNavigate();
 
   const onSubmit = async (data) => {
   try {
@@ -18,7 +20,7 @@ function Login() {
         user: response.data.user,
       },
     });
-    alert('Logged in as ' + response.data.user.role);
+    navigate('/dashboard');
   } catch (error) {
     alert('Error: ' + error.response.data.message);
   }

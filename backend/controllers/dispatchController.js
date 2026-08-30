@@ -2,6 +2,7 @@ const Dispatch = require('../models/Dispatch');
 const Vehicle = require('../models/Vehicle');
 const Driver = require('../models/Driver');
 const Shipment = require('../models/Shipment');
+const Order = require('../models/Order');
 
 const createDispatch = async (req, res) => {
   try {
@@ -28,6 +29,7 @@ const createDispatch = async (req, res) => {
     vehicle.status = 'In-Use';
     await vehicle.save();
     driver.available = false;
+    driver.assignedVehicleId = vehicleId;
     await driver.save();
     shipment.status = 'Assigned';
     await shipment.save();
@@ -107,9 +109,15 @@ const updateDispatches = async (req, res) => {
     vehicle.status = 'Available';
     await vehicle.save();
     driver.available = true;
+    driver.assignedVehicleId = null;
     await driver.save();
     shipment.status = 'Delivered';
     await shipment.save();
+    const order = await Order.findById(shipment.orderId);
+    if (order) {
+      order.status = 'Delivered';
+      await order.save();
+    }
     res.status(200).json({ message: 'Dispatch successfully updated'});
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useContext } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import AuthContext from '../context/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -7,6 +7,7 @@ import OrderStatusTimeline from '../components/OrderStatusTimeline';
 
 function OrderDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useContext(AuthContext);
   const { addToast } = useToast();
 
@@ -25,7 +26,6 @@ function OrderDetail() {
 
   useEffect(() => { fetchOrder(); }, [fetchOrder]);
 
-  // Build a productId -> name lookup once, so the items table can show names not IDs
   useEffect(() => {
     api.get('/products', { params: { limit: 100 } }).then((res) => {
       const map = {};
@@ -36,6 +36,7 @@ function OrderDetail() {
 
   const canConfirm = order?.status === 'Draft' && ['Administrator', 'Logistics Coordinator'].includes(user.role);
   const canCancel = order && !['Delivered', 'Cancelled'].includes(order.status);
+  const canCreateShipment = order?.status === 'Confirmed' && ['Administrator', 'Logistics Coordinator'].includes(user.role);
 
   const updateStatus = async (newStatus, confirmMessage) => {
     if (!window.confirm(confirmMessage)) return;
@@ -44,6 +45,21 @@ function OrderDetail() {
       await api.put(`/orders/${id}/status`, { status: newStatus });
       addToast(`Order marked as ${newStatus}`, 'success');
       fetchOrder();
+    } catch (error) {
+      addToast(error.response?.data?.message || 'Something went wrong');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const createShipment = async () => {
+    const destinationAddress = window.prompt('Enter destination address for this shipment:');
+    if (!destinationAddress) return;
+    setUpdating(true);
+    try {
+      const res = await api.post('/shipments', { orderId: id, destinationAddress });
+      addToast('Shipment created', 'success');
+      navigate(`/shipments/${res.data.shipment._id}`);
     } catch (error) {
       addToast(error.response?.data?.message || 'Something went wrong');
     } finally {
@@ -110,6 +126,15 @@ function OrderDetail() {
                 className="bg-red-600 text-white px-4 py-2 rounded disabled:opacity-50"
               >
                 Cancel Order
+              </button>
+            )}
+            {canCreateShipment && (
+              <button
+                disabled={updating}
+                onClick={createShipment}
+                className="bg-purple-600 text-white px-4 py-2 rounded disabled:opacity-50"
+              >
+                Create Shipment
               </button>
             )}
           </div>

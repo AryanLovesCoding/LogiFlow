@@ -3,10 +3,11 @@ const router = express.Router();
 const verifyToken = require('../middleware/verifyToken');
 const authorizeRoles = require('../middleware/authorizeRoles');
 
-const { createDriver, getDrivers, updateAvailability, deleteDriver } = require('../controllers/driverController');
+const { createDriver, getDrivers, updateAvailability, updateDriver, deleteDriver } = require('../controllers/driverController');
 
 router.post('/', verifyToken, authorizeRoles('Administrator', 'Warehouse Manager'), createDriver);
 router.get('/', verifyToken, getDrivers);
+router.put('/:id', verifyToken, authorizeRoles('Administrator', 'Warehouse Manager'), updateDriver);
 router.put('/:id/availability', verifyToken, updateAvailability);
 router.delete('/:id', verifyToken, authorizeRoles('Administrator', 'Warehouse Manager'), deleteDriver);
 
