@@ -15,9 +15,11 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const logsRoutes = require('./routes/logsRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
+const cors = require('cors');
 
 dotenv.config();
 const app = express();
+app.use(cors());
 app.use(express.json());
 connectDB();
 
