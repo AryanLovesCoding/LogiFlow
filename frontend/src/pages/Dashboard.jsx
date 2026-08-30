@@ -13,8 +13,10 @@ function Dashboard() {
   const [openTickets, setOpenTickets] = useState(null);
   const [ordersByDay, setOrdersByDay] = useState(null);
   const [recentActivity, setRecentActivity] = useState(null);
+  const [warehouseMap, setWarehouseMap] = useState({});
+  const [activeDispatches, setActiveDispatches] = useState(null);
 
-  const showInventoryKPIs = ['Administrator', 'Warehouse Manager', 'Warehouse Executive'].includes(user.role);
+  const canSeeLowStock = ['Administrator', 'Warehouse Manager'].includes(user.role);
   const showOrderDispatchKPIs = ['Administrator', 'Logistics Coordinator'].includes(user.role);
   const showTicketKPIs = ['Administrator', 'Customer Support Executive'].includes(user.role);
   const canSeeLogs = user.role === 'Administrator';
@@ -32,8 +34,18 @@ function Dashboard() {
     api.get('/analytics/orders-by-day').then((response) => {
         setOrdersByDay(response.data.ordersByDay);
     });
+    api.get('/warehouses', { params: { limit: 100 } }).then((response) => {
+      const map = {};
+      response.data.warehouses.forEach((w) => { map[w._id] = w.name; });
+      setWarehouseMap(map);
+    });
+    if (showOrderDispatchKPIs) {
+      api.get('/dispatches', { params: { limit: 100 } }).then((response) => {
+        setActiveDispatches(response.data.dispatches.length);
+      });
+    }
 
-    if (showInventoryKPIs) {
+    if (canSeeLowStock) {
         api.get('/inventory/low-stock').then((response) => {
         setLowStock(response.data);
         });
@@ -60,13 +72,13 @@ function Dashboard() {
   return (
     <div>
       <div className="grid grid-cols-3 gap-4">
-        <KpiCard label="Total Orders" value={summary.totalActiveOrders} />
+        <KpiCard label="Active Orders" value={summary.totalActiveOrders} />
 
         {showOrderDispatchKPIs && <KpiCard label="Active Shipments" value={activeShipments} />}
         {showOrderDispatchKPIs && <KpiCard label="Available Vehicles" value={vehicles.vehicle.length} />}
         {showOrderDispatchKPIs && <KpiCard label="Completed Dispatches" value={summary.dispatchesCompletedThisWeek} />}
-
-        {showInventoryKPIs && <KpiCard label="Low-Stock Items" value={lowStock.totalCount} />}
+        {showOrderDispatchKPIs && activeDispatches !== null && <KpiCard label="Total Dispatches" value={activeDispatches} />}
+        {canSeeLowStock && <KpiCard label="Low-Stock Items" value={lowStock?.totalCount ?? 0} />}
 
         {showTicketKPIs && <KpiCard label="Open Tickets" value={openTickets.totalCount} />}
         </div>
@@ -82,9 +94,17 @@ function Dashboard() {
               innerRadius={60}
               outerRadius={100}
             >
-              {summary.shipmentsByStatus.map((entry, index) => (
-                <Cell key={index} fill={['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5]} />
-              ))}
+              {summary.shipmentsByStatus.map((entry, index) => {
+              const statusColors = {
+                Delivered: '#10b981',
+                Failed: '#ef4444',
+                Created: '#94a3b8',
+                Assigned: '#3b82f6',
+                'In-Transit': '#f59e0b',
+                'Out-for-Delivery': '#8b5cf6',
+              };
+              return <Cell key={index} fill={statusColors[entry.status] || '#94a3b8'} />;
+            })}
             </Pie>
             <Tooltip />
             <Legend />
@@ -135,6 +155,22 @@ function Dashboard() {
             </ul>
         </div>
         )}
+
+        <div className="bg-white rounded-lg shadow p-4 mt-6">
+          <h3 className="font-semibold mb-4">Warehouse Utilisation</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart
+              layout="vertical"
+              data={summary.warehouseUtilisation.map((w) => ({ ...w, name: warehouseMap[w.warehouseId] || w.warehouseId }))}
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis type="number" domain={[0, 100]} unit="%" />
+              <YAxis type="category" dataKey="name" width={120} />
+              <Tooltip />
+              <Bar dataKey="usedCapacityPercent" fill="#3b82f6" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
     </div>
   );
 }

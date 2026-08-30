@@ -1,6 +1,7 @@
 const Inventory = require('../models/Inventory');
 const Order = require('../models/Order');
 const ActivityLog = require('../models/ActivityLog');
+const triggerLowStockNotification = require('../utils/notificationUtils');
 
 const createOrder = async (req, res) => {
   try {
@@ -20,12 +21,17 @@ const createOrder = async (req, res) => {
     for (const item of orderItems) {
       totalAmount += item.quantity * item.unitPrice;
     }
+
     for (const item of orderItems) {
       const inventoryRecord = await Inventory.findOne({
         warehouseId: warehouseId,
         productId: item.productId
       });
       inventoryRecord.quantity -= item.quantity;
+      if (inventoryRecord.quantity < inventoryRecord.reorderThreshold) {
+        inventoryRecord.lowStockAlert = true;
+        await triggerLowStockNotification(inventoryRecord);
+      }
       await inventoryRecord.save();
     }
     const newOrder = await Order.create({
@@ -120,6 +126,9 @@ const updateStatus = async (req, res) => {
         });
         if (inventoryRecord) {
           inventoryRecord.quantity += item.quantity;
+          if (inventoryRecord.quantity >= inventoryRecord.reorderThreshold) {
+            inventoryRecord.lowStockAlert = false;
+          }
           await inventoryRecord.save();
         }
       }

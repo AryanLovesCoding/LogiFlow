@@ -24,7 +24,7 @@ const createCustomer = async (req, res) => {
 
 const getCustomer = async (req, res) => {
   try {
-    const { companyName, email, status, page, limit } = req.query;
+    const { companyName, email, accountStatus, page, limit } = req.query;
     const filter = {};
     if (companyName) {
     filter.companyName = { $regex: companyName, $options: 'i' };
@@ -32,8 +32,8 @@ const getCustomer = async (req, res) => {
     if (email) {
       filter.email = { $regex: email, $options: 'i' };
     }
-    if (status) {
-    filter.status = status;
+    if (accountStatus) {
+      filter.accountStatus = accountStatus;
     }
     const currentPage = Number(page) || 1;
     const pageLimit = Number(limit) || 10;

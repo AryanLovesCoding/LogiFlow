@@ -26,7 +26,7 @@ const getWarehouses = async (req, res) => {
     const { city, status, page, limit } = req.query;
     const filter = {};
     if (city) {
-    filter.city = city;
+    filter.city = { $regex: city, $options: 'i' };
     }
     if (status) {
     filter.status = status;

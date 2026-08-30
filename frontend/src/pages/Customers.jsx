@@ -15,7 +15,7 @@ function Customers() {
   const [editing, setEditing] = useState(null);
 
   const fetchCustomers = useCallback(() => {
-    api.get('/customers', { params: { companyName: search || undefined, status: status || undefined, page } })
+    api.get('/customers', { params: { companyName: search || undefined, accountStatus: status || undefined, page } })
       .then((res) => {
         setCustomers(res.data.customers);
         setTotalPages(res.data.totalPages);

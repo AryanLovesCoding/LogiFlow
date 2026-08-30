@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import { useToast } from '../hooks/useToast';
@@ -23,6 +23,9 @@ function CreateOrder() {
   const [unitPrice, setUnitPrice] = useState('');
   const [stockCheck, setStockCheck] = useState(null);
 
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const comboboxRef = useRef(null);
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -30,6 +33,16 @@ function CreateOrder() {
     api.get('/warehouses', { params: { limit: 100 } }).then((res) => setWarehouses(res.data.warehouses));
     api.get('/products', { params: { limit: 100 } }).then((res) => setProducts(res.data.products));
   }, []);
+
+  useEffect(() => {
+      const handleClickOutside = (e) => {
+        if (comboboxRef.current && !comboboxRef.current.contains(e.target)) {
+          setDropdownOpen(false);
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
   const filteredCustomers = customers.filter((c) =>
     c.companyName.toLowerCase().includes(customerSearch.toLowerCase())
@@ -113,38 +126,42 @@ function CreateOrder() {
       </div>
 
       <div className="bg-white rounded-lg shadow p-6">
-        {step === 1 && (
-          <div className="flex flex-col gap-4">
-            <h2 className="font-semibold">Step 1: Select Customer & Warehouse</h2>
+                {step === 1 && (
+                  <div className="flex flex-col gap-4">
+                    <h2 className="font-semibold">Step 1: Select Customer & Warehouse</h2>
 
-            <div>
-              <label className="block text-sm mb-1">Customer</label>
-              <input
-                placeholder="Search company name..."
-                value={customerSearch}
-                onChange={(e) => setCustomerSearch(e.target.value)}
-                className="w-full border p-2 rounded mb-2"
-              />
-              <div className="border rounded max-h-40 overflow-y-auto">
-                {filteredCustomers.length === 0 && (
-                  <p className="text-sm text-gray-400 p-2">No customers match</p>
-                )}
-                {filteredCustomers.map((c) => (
-                  <div
-                    key={c._id}
-                    onClick={() => setCustomerId(c._id)}
-                    className={`p-2 text-sm cursor-pointer hover:bg-gray-50 ${
-                      customerId === c._id ? 'bg-blue-50 font-medium' : ''
-                    }`}
-                  >
-                    {c.companyName}
-                  </div>
-                ))}
-              </div>
-              {selectedCustomer && (
-                <p className="text-sm text-green-700 mt-1">Selected: {selectedCustomer.companyName}</p>
+                    <div className="relative" ref={comboboxRef}>
+          <label className="block text-sm mb-1">Customer</label>
+          <input
+            placeholder="Search company name..."
+            value={dropdownOpen ? customerSearch : (selectedCustomer?.companyName || '')}
+            onFocus={() => { setDropdownOpen(true); setCustomerSearch(''); }}
+            onChange={(e) => setCustomerSearch(e.target.value)}
+            className="w-full border p-2 rounded"
+          />
+          {dropdownOpen && (
+            <div className="absolute z-10 w-full border rounded max-h-40 overflow-y-auto bg-white shadow-lg mt-1">
+              {filteredCustomers.length === 0 && (
+                <p className="text-sm text-gray-400 p-2">No customers match</p>
               )}
+              {filteredCustomers.map((c) => (
+                <div
+                  key={c._id}
+                  onClick={() => {
+                    setCustomerId(c._id);
+                    setCustomerSearch(c.companyName);
+                    setDropdownOpen(false);
+                  }}
+                  className={`p-2 text-sm cursor-pointer hover:bg-gray-50 ${
+                    customerId === c._id ? 'bg-blue-50 font-medium' : ''
+                  }`}
+                >
+                  {c.companyName}
+                </div>
+              ))}
             </div>
+          )}
+        </div>
 
             <div>
               <label className="block text-sm mb-1">Warehouse</label>
