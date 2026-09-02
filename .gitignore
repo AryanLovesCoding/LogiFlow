@@ -1,5 +1,6 @@
 node_modules/
 .env
-.DS_Store*.pdf
+.DS_Store
+*.pdf
 *.xlsx
 Reports/
