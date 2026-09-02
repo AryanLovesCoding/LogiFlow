@@ -3,3 +3,6 @@ node_modules/
 .DS_Store*.pdf
 *.xlsx
 Reports/
+*.pdf
+*.xlsx
+Reports/
