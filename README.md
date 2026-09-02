@@ -314,7 +314,7 @@ A full bug log — every issue hit across all eight weeks, severity, root cause,
 | Database | MongoDB Atlas | M0 free tier. Network access whitelisted to `0.0.0.0/0` — Render's free tier doesn't expose a fixed outbound IP, so there's nothing narrower to whitelist. |
 
 Live:
-- Frontend — _(fill in)_
-- Backend — _(fill in)_
+- Frontend — https://logi-flow-gamma.vercel.app/dashboard
+- Backend — https://logiflow-backend-id6g.onrender.com
 
 Env vars that matter in production specifically: `VITE_API_BASE_URL` on Vercel has to point at the live Render URL with `/api` appended, and it's read via `import.meta.env` at build time — changing it after a deploy does nothing until you trigger a fresh build, since Vite bakes it into the bundle rather than reading it at runtime. `CORS_ORIGIN` on Render has to match the exact Vercel URL, no trailing slash, or every request from the live frontend gets blocked before it reaches any route.
