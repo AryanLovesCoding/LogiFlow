@@ -1,343 +1,320 @@
-# LogiFlow — Enterprise Logistics & Warehouse Management Platform
+# LogiFlow
 
-**Backend API Documentation — Week 4 Milestone**
+Enterprise logistics and warehouse management platform. MERN stack, five-role RBAC, fifteen operational modules covering the full chain from inventory to delivery.
 
-LogiFlow is a MERN-stack enterprise logistics platform supporting five user roles across warehouse, inventory, order, shipment, fleet, and support-ticket operations. This README covers the complete backend built through Week 4 (Months 1 backend engineering phase).
+Built for NextGen Forge Technologies' Advanced Full Stack Software Development Internship (Ref: NFGT/HR/INT/2026/160).
 
----
+## Contents
 
-## 1. System Architecture
+- [What this is](#what-this-is)
+- [Architecture](#architecture)
+- [Stack](#stack)
+- [Roles](#roles)
+- [Setup](#setup)
+- [Repo layout](#repo-layout)
+- [Data models](#data-models)
+- [API](#api)
+- [Things worth knowing before you touch this](#things-worth-knowing-before-you-touch-this)
+- [Deployment](#deployment)
+
+## What this is
+
+A company running warehouses, taking orders, and shipping product needs somewhere to track: what's in stock, who's allowed to touch what, where an order is in its lifecycle, which truck and driver are free, and what's on fire (support tickets). LogiFlow is that system — one backend, one frontend, five roles that each see a different slice of it.
+
+It's not multi-tenant. It's not meant to run more than one company's operations. It assumes a small internal team, which is why user accounts are provisioned by an admin rather than through self-signup — see the Roles section.
+
+## Architecture
+
+Three tiers, deployed separately:
 
 ```
-                    ┌─────────────────────┐
-                    │   React Frontend     │  (Month 2 — Vercel)
-                    └──────────┬───────────┘
-                               │ REST / JSON (JWT Bearer auth)
-                    ┌──────────▼───────────┐
-                    │   Express.js API      │  (Render)
-                    │  routes → middleware  │
-                    │       → controllers   │
-                    └──────────┬───────────┘
-                               │ Mongoose ODM
-                    ┌──────────▼───────────┐
-                    │   MongoDB Atlas       │
-                    └────────────────────────┘
+React SPA (Vercel)  --HTTPS/JSON+JWT-->  Express API (Render)  --Mongoose-->  MongoDB Atlas
 ```
 
-**Request flow for a protected route:**
+Frontend and backend don't share a runtime — they're two separate deployments that only talk over REST. The frontend has no server-side rendering; it's a pure client-side SPA that hits the API for everything, including the initial "am I logged in" check on page load.
 
-```
-Client Request
-    │
-    ▼
-verifyToken middleware  ──► invalid/missing token ──► 401
-    │ (valid)
-    ▼
-authorizeRoles middleware ──► role not permitted ──► 403
-    │ (permitted)
-    ▼
-Controller function ──► Mongoose model ──► MongoDB
-    │
-    ▼
-JSON Response
-```
+Auth is stateless. Login returns a JWT; every subsequent request carries it as a `Bearer` token. The backend has no session store — `verifyToken` middleware decodes the JWT on every request, `authorizeRoles(...)` checks the decoded role against a route's allowlist. Nothing is cached server-side about who's logged in.
 
-### Folder Structure
-```
-backend/
-├── config/         # DB connection
-├── controllers/    # Business logic per module
-├── middleware/      # verifyToken, authorizeRoles, rolePermissions
-├── models/          # Mongoose schemas
-├── routes/          # Express routers per module
-├── utils/            # Shared helpers
-├── .env              # Environment variables (not committed)
-└── server.js / app.js
-```
+The frontend mirrors this with two nested route guards: `ProtectedRoute` (are you logged in at all) wraps `RoleProtectedRoute` (does your role match this route group's allowlist). Both exist because hiding a link in the sidebar isn't access control — a user can still type the URL directly, so the actual gate has to live in the route tree, not just the nav.
 
----
+Two things worth calling out about how state moves through the app, because they trip people up:
 
-## 2. Tech Stack
+- The dashboard's cross-module aggregates (`totalActiveOrders`, `shipmentsByStatus`, `warehouseUtilisation`, etc.) are computed live via Mongo aggregation pipelines on every request to `/api/analytics/summary`. There's no caching layer, no scheduled job pre-computing anything. Fine at current scale; would need revisiting if this ever handled meaningfully more data.
+- Status transitions that cascade across models (an order going Confirmed reserves inventory, a shipment going Delivered flips its linked order, a dispatch completing frees a vehicle and driver) are handled by explicit code in the relevant controller, not database triggers or hooks. This means the cascade logic lives with whichever endpoint happens to trigger it, and if two different endpoints can both cause the same downstream effect, the cascade has to be duplicated in both places. This came up for real — see the Dispatch completion note below.
 
-| Layer | Technology |
+## Stack
+
+Frontend: React (Vite), Tailwind, React Router v6, Axios, React Hook Form, Recharts, jsPDF + html2canvas for client-side PDF export.
+
+Backend: Node/Express, Mongoose, JWT + bcrypt, express-validator, Multer.
+
+Hosting: Vercel (frontend), Render (backend, free tier), MongoDB Atlas (M0 free tier).
+
+## Roles
+
+| Role | What they actually do in this app |
 |---|---|
-| Runtime | Node.js |
-| Framework | Express.js |
-| Database | MongoDB Atlas (Mongoose ODM) |
-| Auth | JWT (8h expiry) + bcrypt |
-| Validation | Express Validator (select endpoints) |
-| API Testing | Postman |
+| Administrator | Everything. User provisioning, activity log review, full module access. |
+| Warehouse Manager | Warehouse/Product CRUD, inventory restock, low-stock review, fleet and dispatch management, reports. |
+| Warehouse Executive | Inventory view and deduction. Narrower than Warehouse Manager on purpose — they can move stock, not restructure the warehouse. |
+| Logistics Coordinator | Customers, orders, shipments — the sales-to-delivery pipeline. |
+| Customer Support Executive | Tickets only. |
 
----
+There's no signup page. Accounts are created by an Administrator via `POST /api/auth/register`, currently done through Postman rather than a UI — this was a deliberate call after a security review with the project's Industry Guide, not an oversight. A `CreateUser.jsx` page exists in the codebase (admin-gated, functional) but is intentionally left out of the route tree pending sign-off on whether to expose it in-app at all.
 
-## 3. Environment Variables
+## Setup
 
-| Variable | Description |
-|---|---|
-| `MONGODB_URI` | MongoDB Atlas connection string |
-| `JWT_SECRET` | Secret key for signing JWTs |
-| `JWT_EXPIRES_IN` | Token expiry (`8h`) |
-| `PORT` | Server port (default 8000) |
+Needs Node 18+, a MongoDB instance (Atlas or local), npm.
 
----
-
-## 4. User Roles
-
-| Role |
-|---|
-| Administrator |
-| Warehouse Manager |
-| Warehouse Executive |
-| Logistics Coordinator |
-| Customer Support Executive |
-
-Roles are encoded in the JWT payload (`userId`, `email`, `role`) at login and checked on every protected route via `verifyToken` → `authorizeRoles(...allowedRoles)` middleware. Routes without `authorizeRoles` are accessible to **any authenticated role**.
-
----
-
-## 5. Local Development Setup
-
+Backend:
 ```bash
 cd backend
 npm install
-cp .env.example .env    # fill in MONGODB_URI, JWT_SECRET, etc.
-npm run dev              # starts server with nodemon on PORT (default 8000)
+```
+`.env` in `backend/`:
+```
+MONGODB_URI=mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/<db>?retryWrites=true&w=majority
+JWT_SECRET=<anything long and random>
+JWT_EXPIRES_IN=8h
+NODE_ENV=development
+CORS_ORIGIN=http://localhost:5173
+PORT=8000
+```
+```bash
+npm start
 ```
 
-Test the connection: `GET http://localhost:8000/api/auth/me` (with a valid Bearer token) should return the logged-in user's profile.
-
----
-
-## 6. Core Business Flows
-
-### 6.1 Order → Shipment → Dispatch → Delivery
-
+Frontend:
+```bash
+cd frontend
+npm install
 ```
-Order (Draft)
-   │  POST /api/orders
-   │  stock validated & reserved
-   ▼
-Order (Confirmed)  ── PUT /api/orders/:id/status ──┐
-   │                                                 │ stock returned
-   │  POST /api/shipments                            │ on Cancel
-   ▼                                                 │
-Shipment (Created)                                    ▼
-   │  POST /api/dispatches                    Order (Cancelled)
-   │  vehicle → In-Use, driver → unavailable
-   ▼
-Shipment (Assigned)
-   │  PUT /api/shipments/:id/status → In-Transit → Out-for-Delivery
-   ▼
-Shipment (Delivered)  ──► auto-syncs ──► Order (Delivered)
-   │
-   │  PUT /api/dispatches/:id/complete
-   ▼
-Vehicle → Available, Driver → available
+`.env` in `frontend/`:
+```
+VITE_API_BASE_URL=http://localhost:8000/api
+```
+```bash
+npm run dev
 ```
 
-### 6.2 Inventory Low-Stock Notification
-
+No users exist on a fresh database. Create at least one per role manually:
 ```
-PUT /api/inventory/:id/deduct
-   │
-   ▼
-quantity -= deductionAmount
-   │
-   ├─ quantity < 0 ?  ──► reject (400)
-   │
-   ├─ quantity < reorderThreshold ?
-   │      │
-   │      ▼
-   │  lowStockAlert = true
-   │      │
-   │      ▼
-   │  Notification created for relevant role
-   ▼
-200 OK
+POST http://localhost:8000/api/auth/register
+{
+  "name": "...",
+  "email": "...",
+  "password": "...",
+  "role": "Administrator"
+}
 ```
 
-### 6.3 Dispatch Assignment (Availability Validation)
+## Repo layout
 
 ```
-POST /api/dispatches { shipmentId, vehicleId, driverId, scheduledDate, routeNotes }
-   │
-   ▼
-Fetch Vehicle, Driver, Shipment
-   │
-   ├─ Vehicle not found?     ──► 404
-   ├─ Driver not found?      ──► 404
-   ├─ Shipment not found?    ──► 404
-   ├─ Vehicle.status ≠ Available? ──► 400 "Vehicle not available"
-   ├─ Driver.available ≠ true?    ──► 400 "Driver not available"
-   │
-   ▼ (all pass)
-Create Dispatch
-Vehicle.status = 'In-Use'
-Driver.available = false
-Shipment.status = 'Assigned'
-   │
-   ▼
-201 Created
+backend/
+  config/       Mongo connection
+  controllers/  business logic, one file per resource
+  middleware/   verifyToken, authorizeRoles
+  models/       Mongoose schemas
+  routes/       route definitions, wire controllers to middleware
+  utils/        shared helpers (notification triggers etc.)
+frontend/src/
+  api/          Axios instance + interceptors
+  components/   modals, Sidebar, TopNav, route guards, reusable pieces
+  context/      AuthContext, ToastContext
+  hooks/        useToast
+  pages/        one component per route
+  App.jsx       route tree + role guarding
 ```
 
----
+## Data models
 
-## 7. API Reference
+Twelve Mongoose schemas. No embedded documents for the core entities — everything's a reference, so it reads more like a relational schema wearing a document database's clothes. That's a deliberate choice for a system this interconnected; a fully embedded document model would mean duplicating warehouse/product data across every inventory record.
 
-Base URL: `/api`. All routes except `register`/`login` require header `Authorization: Bearer <token>`.
-
-### 7.1 Auth (`/api/auth`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/register` | Public | Create a user account |
-| POST | `/login` | Public | Authenticate, returns JWT (8h expiry) |
-| POST | `/logout` | Any | Logout |
-| GET | `/me` | Any | Get current logged-in user's profile |
-| GET | `/users` | Administrator | List all users |
-
-### 7.2 Warehouses (`/api/warehouses`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Warehouse Manager | Create warehouse |
-| GET | `/` | Any | List warehouses (filter: `city`, `status`; paginated) |
-| GET | `/:id` | Any | Get warehouse detail |
-| PUT | `/:id` | Administrator, Warehouse Manager | Update warehouse |
-| DELETE | `/:id` | Administrator, Warehouse Manager | Soft delete (status → Inactive) |
-
-### 7.3 Products (`/api/products`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Warehouse Manager | Create product |
-| GET | `/` | Any | List products (filter: `category`, search by name/SKU; paginated) |
-| GET | `/:id` | Any | Get product detail |
-| PUT | `/:id` | Administrator, Warehouse Manager | Update product |
-| DELETE | `/:id` | Administrator, Warehouse Manager | Soft delete |
-
-### 7.4 Inventory (`/api/inventory`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Warehouse Manager | Create inventory record |
-| GET | `/` | Any | List (filter: `warehouseId`, `productId`, low-stock flag; paginated) |
-| GET | `/low-stock` | Administrator, Warehouse Manager | List all low-stock flagged records |
-| GET | `/:id` | Any | Get inventory detail |
-| PUT | `/:id/restock` | Administrator, Warehouse Manager | Increment quantity |
-| PUT | `/:id/deduct` | Administrator, Warehouse Manager | Decrement quantity (blocks negative stock, auto-flags low stock) |
-
-### 7.5 Customers (`/api/customers`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Logistics Coordinator | Onboard customer |
-| GET | `/` | Any | List customers (search name/email/phone, filter status; paginated) |
-| GET | `/:id` | Any | Full customer profile + order summary |
-| PUT | `/:id` | Any authenticated | Update customer |
-| DELETE | `/:id` | Administrator, Logistics Coordinator | Deactivate customer |
-
-### 7.6 Orders (`/api/orders`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Any authenticated | Create order (validates & reserves stock) |
-| GET | `/` | Any | List orders (filter: status, customerId, date range; paginated) |
-| GET | `/:id` | Any | Order detail with items |
-| PUT | `/:id/status` | Any authenticated | Status transition (Draft → Confirmed → Processing → Dispatched → Delivered / Cancelled) |
-
-### 7.7 Shipments (`/api/shipments`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Logistics Coordinator | Create shipment from confirmed order |
-| GET | `/` | Any | List shipments (filter status, warehouseId, date; paginated) |
-| GET | `/:id` | Any | Shipment detail incl. tracking history |
-| PUT | `/:id/status` | Any authenticated | Status transition (Created → Assigned → In-Transit → Out-for-Delivery → Delivered/Failed); auto-syncs linked Order on Delivered |
-| POST | `/:id/tracking` | Any authenticated | Append a tracking event |
-
-### 7.8 Vehicles (`/api/vehicles`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Warehouse Manager | Register vehicle |
-| GET | `/` | Any | List (filter: status, type; paginated) |
-| GET | `/available` | Any | List vehicles with `status: Available` |
-| PUT | `/:id` | Administrator, Warehouse Manager | Update vehicle |
-| DELETE | `/:id` | Administrator, Warehouse Manager | Set status to Maintenance |
-
-### 7.9 Drivers (`/api/drivers`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Warehouse Manager | Register driver |
-| GET | `/` | Any | List (filter by `available`; paginated) |
-| PUT | `/:id/availability` | Any authenticated | Set driver availability |
-| DELETE | `/:id` | Administrator, Warehouse Manager | Set `available: false` |
-
-### 7.10 Dispatch Planning (`/api/dispatches`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Administrator, Warehouse Manager | Assign shipment to vehicle+driver (validates availability) |
-| GET | `/` | Any | List (filter: date, status; paginated) |
-| GET | `/:id` | Any | Dispatch detail |
-| PUT | `/:id/complete` | Administrator, Warehouse Manager | Complete dispatch — releases vehicle/driver, marks shipment Delivered |
-
-### 7.11 Analytics (`/api/analytics`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| GET | `/summary` | Any authenticated | KPI summary: active orders, shipments by status, warehouse utilisation, top products, dispatches completed this week |
-| GET | `/orders-by-day` | Any authenticated | Order count per day, last 30 days |
-
-### 7.12 Activity Logs (`/api/logs`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| GET | `/` | Administrator | Paginated audit trail (filter: entity, userId, date range) |
-
-### 7.13 Notifications (`/api/notifications`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| GET | `/me` | Any authenticated | Current user's unread notifications, newest first |
-| PATCH | `/:id/read` | Any authenticated | Mark one notification read |
-| PATCH | `/read-all` | Any authenticated | Mark all of current user's notifications read |
-
-### 7.14 Support Tickets (`/api/tickets`)
-
-| Method | Endpoint | Roles | Description |
-|---|---|---|---|
-| POST | `/` | Any authenticated | Create ticket |
-| GET | `/` | Any (self-filtered for non-Admin) | List tickets — Admin sees all, others see only assigned |
-| PUT | `/:id/assign` | Administrator | Assign ticket to a support executive |
-| PUT | `/:id/status` | Any authenticated | Update ticket status |
-| POST | `/:id/comment` | Any authenticated | Append comment to ticket timeline |
-
----
-
-## 8. Status Enums Reference
-
-| Model | Field | Values |
+| Model | Notable fields | References |
 |---|---|---|
-| Order | `status` | Draft, Confirmed, Processing, Dispatched, Delivered, Cancelled |
-| Shipment | `status` | Created, Assigned, In-Transit, Out-for-Delivery, Delivered, Failed |
-| Vehicle | `status` | Available, In-Use, Maintenance |
-| Driver | `available` | Boolean |
-| Dispatch | *(no status field — inferred via linked Shipment status)* | — |
-| Ticket | `status` | Open, In-Progress, Resolved, Closed |
-| Ticket | `priority` | Low, Medium, High, Critical |
-| ActivityLog | `action` | Create, Update, Delete |
+| User | name, email, password (bcrypt), role | — |
+| Warehouse | name, location, city, totalCapacity, managerId, status | managerId → User |
+| Product | name, sku (unique), category, unit, status | — |
+| Inventory | warehouseId, productId, quantity, reorderThreshold, lowStockAlert | warehouseId → Warehouse, productId → Product |
+| Customer | companyName, contactPersonName, creditLimit, accountStatus | — |
+| Order | customerId, warehouseId, orderItems[], totalAmount, status | customerId → Customer, warehouseId → Warehouse |
+| Shipment | orderId, originWarehouseId, trackingId, status, trackingHistory[] | orderId → Order, originWarehouseId → Warehouse |
+| Vehicle | licensePlate, type, capacityKg, status | — |
+| Driver | name, licenceNumber, available, assignedVehicleId | assignedVehicleId → Vehicle (system-managed only, see below) |
+| Dispatch | shipmentId, vehicleId, driverId, scheduledDate, routeNotes | shipmentId → Shipment, vehicleId → Vehicle, driverId → Driver |
+| Ticket | title, priority, status, assigneeId, comments[] | assigneeId → User, linkedOrderId → Order (optional) |
+| ActivityLog | entity, action, userId, timestamp | userId → User |
 
----
+Status machines, all forward-only with a terminal-state exception for cancellation/failure:
 
-## 9. Known Gaps / Notes for Future Work
+- **Order**: Draft → Confirmed → Processing → Dispatched → Delivered, or Cancelled from any non-terminal state.
+- **Shipment**: Created → Assigned → In-Transit → Out-for-Delivery → Delivered, or Failed. The frontend deliberately caps manual progression at Out-for-Delivery — Delivered is only reachable by completing the linked Dispatch, not by clicking through the shipment page. See below for why.
+- **Ticket**: Open → In-Progress → Resolved → Closed.
 
-- `ActivityLog` writes are currently implemented for Inventory, Order, and Shipment controllers only — Vehicle, Driver, and Dispatch actions are not yet audit-logged.
-- Order/Ticket status transitions are not currently enforced as forward-only state machines at the API level (unlike Shipment).
-- Full 5-role permission matrix testing was scoped down to representative write-endpoint sampling rather than exhaustive per-module testing.
+## API
 
----
+Bearer token required on everything except register/login. "Roles" column is empty where any authenticated user can hit the endpoint.
 
-*Document prepared as part of Week 4 deliverables — NextGen Forge Technologies Internship, Ref: NFGT/HR/INT/2026/160*
+**Auth** — `/api/auth`
+
+| | | |
+|---|---|---|
+| POST /register | create user | public (used admin-side via Postman) |
+| POST /login | returns JWT + user | public |
+| GET /me | session restore on app load | any |
+| GET /users | list all users | Administrator |
+
+**Warehouses** — `/api/warehouses`
+
+| | | |
+|---|---|---|
+| POST / | create | Admin, Warehouse Manager |
+| GET / | list, filters: city (regex), status | any |
+| GET /:id | detail | any |
+| PUT /:id | update, incl. managerId | Admin, Warehouse Manager |
+| DELETE /:id | soft delete → Inactive | Admin, Warehouse Manager |
+
+**Products** — `/api/products`
+
+| | | |
+|---|---|---|
+| POST / | create | Admin, Warehouse Manager |
+| GET / | list, filters: category (regex), name/sku search | any |
+| GET /:id | detail | any |
+| PUT /:id | update | Admin, Warehouse Manager |
+| DELETE /:id | soft delete | Admin, Warehouse Manager |
+
+**Inventory** — `/api/inventory`
+
+| | | |
+|---|---|---|
+| POST / | create record | Admin, Warehouse Manager |
+| GET / | list, filters: warehouseId, productId, lowStockAlert | any |
+| GET /low-stock | flagged records only | Admin, Warehouse Manager |
+| GET /:id | detail | any |
+| PUT /:id/restock | increment quantity | Admin, Warehouse Manager |
+| PUT /:id/deduct | decrement, blocks negative, sets lowStockAlert | Admin, Warehouse Manager |
+
+**Customers** — `/api/customers`
+
+| | | |
+|---|---|---|
+| POST / | create | Admin, Logistics Coordinator |
+| GET / | list, filters: companyName, accountStatus | Admin, Logistics Coordinator |
+| GET /:id | detail | Admin, Logistics Coordinator |
+| PUT /:id | update | Admin, Logistics Coordinator |
+| DELETE /:id | soft delete | Admin, Logistics Coordinator |
+
+**Orders** — `/api/orders`
+
+| | | |
+|---|---|---|
+| POST / | create, validates + reserves stock | Admin, Logistics Coordinator |
+| GET / | list, filters: status, customerId, date range | Admin, Logistics Coordinator |
+| GET /:id | detail | Admin, Logistics Coordinator |
+| PUT /:id/status | status transition, cancellation returns stock | Admin, Logistics Coordinator |
+
+**Shipments** — `/api/shipments`
+
+| | | |
+|---|---|---|
+| POST / | create from a Confirmed order | Admin, Logistics Coordinator |
+| GET / | list, filters: status, originWarehouseId, date range | Admin, Logistics Coordinator |
+| GET /:id | detail incl. tracking history | Admin, Logistics Coordinator |
+| PUT /:id/status | status transition; Delivered syncs linked Order | Admin, Logistics Coordinator |
+| POST /:id/tracking | append tracking event | Admin, Logistics Coordinator |
+
+**Vehicles** — `/api/vehicles`
+
+| | | |
+|---|---|---|
+| POST / | create | Admin, Warehouse Manager |
+| GET / | list, filters: status, type | any |
+| GET /available | Available-status vehicles only | any |
+| PUT /:id | update | Admin, Warehouse Manager |
+| DELETE /:id | soft delete → Maintenance | Admin, Warehouse Manager |
+
+**Drivers** — `/api/drivers`
+
+| | | |
+|---|---|---|
+| POST / | create | Admin, Warehouse Manager |
+| GET / | list, filter: available | any |
+| PUT /:id | update name/licence/phone only | Admin, Warehouse Manager |
+| PUT /:id/availability | toggle | any |
+| DELETE /:id | delete | Admin, Warehouse Manager |
+
+**Dispatches** — `/api/dispatches`
+
+| | | |
+|---|---|---|
+| POST / | create, assigns vehicle+driver, shipment → Assigned | Admin, Warehouse Manager |
+| GET / | list, filter: date | any |
+| GET /:id | detail | any |
+| PUT /:id/complete | frees vehicle+driver, Shipment+Order → Delivered | Admin, Warehouse Manager |
+
+**Tickets** — `/api/tickets`
+
+| | | |
+|---|---|---|
+| POST / | create | any |
+| GET / | list, filters: status, priority | any |
+| PUT /:id/assign | assign to a user | Administrator |
+| PUT /:id/status | status transition | any |
+| POST /:id/comment | append comment | any |
+
+**Analytics** — `/api/analytics`
+
+| | | |
+|---|---|---|
+| GET /summary | dashboard KPIs, warehouse utilisation, top products | any |
+| GET /orders-by-day | last 30 days, daily order counts | any |
+
+**Logs** — `/api/logs`
+
+| | | |
+|---|---|---|
+| GET / | activity log, filters: entity, userId, date range | Administrator |
+
+**Notifications** — `/api/notifications`
+
+| | | |
+|---|---|---|
+| GET /me | current user's unread | any |
+| PATCH /:id/read | mark one read | any |
+| PATCH /read-all | mark all read | any |
+
+## Things worth knowing before you touch this
+
+**Driver–vehicle assignment is fully automatic, on purpose.** `Driver.assignedVehicleId` used to be editable directly through the driver form, independent of whatever dispatch that driver was actually on. That let a driver's profile disagree with reality — assigned to Vehicle A on paper, actually out with Vehicle B on an active dispatch. Fixed by removing manual assignment entirely. The field is now written only by `POST /dispatches` (on assignment) and cleared only by `PUT /dispatches/:id/complete`. If you're tempted to add a manual override back in, don't — that's exactly the bug this fixes.
+
+**`Dispatch` has no `status` field.** Whether one is "done" is inferred client-side from its linked shipment's status (`Delivered` or `Failed` means done). This is a schema gap, not a frontend workaround choice — it'd be cleaner with an explicit status field, just wasn't caught until the UI was already built around inferring it.
+
+**Manually marking a shipment `Delivered` is capped one step short on the frontend.** The Shipment Detail page lets you walk a shipment through Created → Assigned → In-Transit → Out-for-Delivery, and stops there. Reaching Delivered requires completing the Dispatch instead. This exists because the two code paths that can set a shipment to Delivered — the manual status endpoint and dispatch completion — don't share logic, and only one of them frees up the vehicle/driver. Letting the manual path reach Delivered meant a shipment could complete while its vehicle and driver stayed permanently marked unavailable. Capping the manual path was the faster fix; the more correct fix would be consolidating both into one shared function, which hasn't been done yet.
+
+**No `GET /tickets/:id`.** The ticket detail page fetches the full list and finds the match client-side. Works fine at current volume, won't scale indefinitely — flagging it here so it's not mistaken for an oversight if someone goes looking for the endpoint and doesn't find it.
+
+**`GET /vehicles/available` returns its array under the key `vehicle`, singular** — every other list endpoint uses the plural. Frontend code already accounts for this. Left as-is rather than fixed, since fixing it means touching a working endpoint and everywhere that calls it for a purely cosmetic inconsistency.
+
+**Notifications only fire for low-stock and shipment-failure.** Dispatch confirmation and ticket assignment don't trigger notifications — not missing by accident, just outside what was actually scoped as required.
+
+**No unique index on `{warehouseId, productId}` in Inventory.** Nothing stops two inventory records existing for the same product in the same warehouse. Hasn't caused a problem in practice; would if inventory creation became a high-traffic path with concurrent writes.
+
+**Product has no price field.** Order line items collect unit price manually at order-creation time rather than pulling a default from the product record. Fine for now, but means the same product can get entered at different prices across different orders with no record of which is "correct" — a real gap if pricing consistency ever matters here.
+
+A full bug log — every issue hit across all eight weeks, severity, root cause, how it got fixed — lives in `Reports/` locally (excluded from the public repo).
+
+## Deployment
+
+| | | |
+|---|---|---|
+| Frontend | Vercel | root dir `frontend`. Needs `frontend/vercel.json` with a SPA rewrite (`/(.*) → /index.html`) or direct navigation to any route other than `/` 404s — Vercel has no idea `/login` is a valid path without being told. |
+| Backend | Render | root dir `backend`. Free tier spins down after ~15 min idle; first request after that takes 30-60s to wake up. |
+| Database | MongoDB Atlas | M0 free tier. Network access whitelisted to `0.0.0.0/0` — Render's free tier doesn't expose a fixed outbound IP, so there's nothing narrower to whitelist. |
+
+Live:
+- Frontend — https://logi-flow-gamma.vercel.app/dashboard
+- Backend — https://logiflow-backend-id6g.onrender.com
+
+Env vars that matter in production specifically: `VITE_API_BASE_URL` on Vercel has to point at the live Render URL with `/api` appended, and it's read via `import.meta.env` at build time — changing it after a deploy does nothing until you trigger a fresh build, since Vite bakes it into the bundle rather than reading it at runtime. `CORS_ORIGIN` on Render has to match the exact Vercel URL, no trailing slash, or every request from the live frontend gets blocked before it reaches any route.
